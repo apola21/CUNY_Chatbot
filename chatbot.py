@@ -2,8 +2,11 @@ import openai
 import os
 import json
 import logging
+import time
 from typing import List, Dict, Any
 from knowledge_base import CUNYKnowledgeBase
+from web_Scraper import get_cuny_answer_for_chatbot
+from conversation_logger import conversation_logger
 
 logger = logging.getLogger(__name__)
 
@@ -49,29 +52,62 @@ Important guidelines:
 Remember: You're helping students make one of the most important decisions of their lives - be supportive and informative!"""
 
     def get_response(self, user_message: str, conversation_history: List[Dict[str, str]] = None) -> str:
-        """Generate a response to user message using OpenAI and knowledge base"""
+        """Generate a response to user message using live search + knowledge base"""
+        start_time = time.time()
+        response_method = "unknown"
+        data_sources = []
+        response = ""
+        
         try:
-            # Search knowledge base for relevant information
-            kb_results = self.knowledge_base.search(user_message)
+            # Try live search first for current CUNY information
+            live_result = get_cuny_answer_for_chatbot(user_message, use_live_search=True)
             
-            # If OpenAI is available, try to use it
-            if self.has_openai and self.openai_client:
-                # Prepare context from knowledge base
-                context = self._prepare_context(kb_results)
-                
-                # Prepare conversation history
-                messages = self._prepare_messages(user_message, conversation_history, context)
-                
-                # Generate response using OpenAI
-                response = self._generate_openai_response(messages)
-                return response
+            if live_result["success"]:
+                logger.info(f"Live search successful for: {user_message}")
+                response = live_result["answer"]
+                response_method = "live_search"
+                data_sources = [source.get("url", "") for source in live_result.get("sources", [])]
             else:
-                # Use fallback response if OpenAI is not available
-                return self._get_fallback_response(user_message)
+                # Fallback to static knowledge base
+                logger.info(f"Live search failed, using static knowledge base for: {user_message}")
+                kb_results = self.knowledge_base.search(user_message)
+                
+                # If OpenAI is available, try to use it
+                if self.has_openai and self.openai_client:
+                    # Prepare context from knowledge base
+                    context = self._prepare_context(kb_results)
+                    
+                    # Prepare conversation history
+                    messages = self._prepare_messages(user_message, conversation_history, context)
+                    
+                    # Generate response using OpenAI
+                    response = self._generate_openai_response(messages)
+                    response_method = "static_kb"
+                else:
+                    # Use fallback response if OpenAI is not available
+                    response = self._get_fallback_response(user_message)
+                    response_method = "fallback"
+            
+            # Log the conversation
+            response_time_ms = int((time.time() - start_time) * 1000)
+            self._log_conversation(
+                user_message, response, data_sources, response_method, response_time_ms
+            )
+            
+            return response
             
         except Exception as e:
             logger.error(f"Error generating response: {str(e)}")
-            return self._get_fallback_response(user_message)
+            response = self._get_fallback_response(user_message)
+            response_method = "fallback"
+            
+            # Log the error conversation
+            response_time_ms = int((time.time() - start_time) * 1000)
+            self._log_conversation(
+                user_message, response, [], response_method, response_time_ms
+            )
+            
+            return response
     
     def _prepare_context(self, kb_results: List[Dict[str, Any]]) -> str:
         """Prepare context from knowledge base search results"""
@@ -185,3 +221,74 @@ Remember: You're helping students make one of the most important decisions of th
         }
         
         return quick_responses.get(question_type, "I'm here to help! What would you like to know about CUNY?")
+    
+    def _log_conversation(self, user_query: str, bot_response: str, data_sources: List[str], 
+                         response_method: str, response_time_ms: int):
+        """Log conversation to database for OAREDA analytics"""
+        try:
+            # Extract user intent from query (simple keyword matching)
+            user_intent = self._extract_user_intent(user_query)
+            user_sub_intent = self._extract_user_sub_intent(user_query)
+            user_audience = self._extract_user_audience(user_query)
+            
+            # Log the conversation
+            conversation_logger.log_conversation(
+                user_query=user_query,
+                bot_response=bot_response,
+                data_sources=data_sources,
+                response_method=response_method,
+                user_audience=user_audience,
+                user_intent=user_intent,
+                user_sub_intent=user_sub_intent,
+                response_time_ms=response_time_ms
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to log conversation: {e}")
+    
+    def _extract_user_intent(self, query: str) -> str:
+        """Extract user intent from query using keyword matching"""
+        query_lower = query.lower()
+        
+        if any(word in query_lower for word in ['admission', 'apply', 'application', 'requirement']):
+            return 'admission_requirements'
+        elif any(word in query_lower for word in ['tuition', 'cost', 'fee', 'price', 'financial']):
+            return 'financial_aid'
+        elif any(word in query_lower for word in ['program', 'major', 'degree', 'course']):
+            return 'academic_programs'
+        elif any(word in query_lower for word in ['campus', 'tour', 'visit', 'location']):
+            return 'campus_life'
+        elif any(word in query_lower for word in ['deadline', 'date', 'when']):
+            return 'application_deadlines'
+        elif any(word in query_lower for word in ['contact', 'phone', 'email', 'office']):
+            return 'contact_information'
+        else:
+            return 'general_inquiry'
+    
+    def _extract_user_sub_intent(self, query: str) -> str:
+        """Extract more specific sub-intent from query"""
+        query_lower = query.lower()
+        
+        if any(word in query_lower for word in ['deadline', 'date', 'when']):
+            return 'deadlines'
+        elif any(word in query_lower for word in ['document', 'transcript', 'upload']):
+            return 'document_submission'
+        elif any(word in query_lower for word in ['status', 'track', 'check']):
+            return 'application_tracking'
+        elif any(word in query_lower for word in ['transfer', 'credit']):
+            return 'transfer_credits'
+        elif any(word in query_lower for word in ['international', 'visa']):
+            return 'international_students'
+        else:
+            return 'general'
+    
+    def _extract_user_audience(self, query: str) -> str:
+        """Extract user audience type from query"""
+        query_lower = query.lower()
+        
+        if any(word in query_lower for word in ['current', 'enrolled', 'student']):
+            return 'current_student'
+        elif any(word in query_lower for word in ['apply', 'application', 'admission']):
+            return 'applicant'
+        else:
+            return 'prospect'
