@@ -344,5 +344,5 @@ class ConversationLogger:
         return gaps
 
 # Global logger instance
-conversation_logger = ConversationLogger()
+conversation_logger = ConversationLogger(database_url=os.getenv('DATABASE_URL'))
 
