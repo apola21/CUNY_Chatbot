@@ -95,6 +95,50 @@ def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
+@app.route('/api/analytics', methods=['GET'])
+def get_analytics():
+    """Get conversation analytics for OAREDA"""
+    try:
+        from conversation_logger import conversation_logger
+        
+        # Get stats for last 24 hours
+        stats = conversation_logger.get_conversation_stats(hours=24)
+        
+        return jsonify({
+            'status': 'success',
+            'analytics': stats,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting analytics: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Analytics not available - check database connection',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/analytics/dashboard', methods=['GET'])
+def get_dashboard_data():
+    """Get comprehensive dashboard data"""
+    try:
+        from conversation_logger import conversation_logger
+        
+        dashboard_data = conversation_logger.get_analytics_dashboard_data()
+        
+        return jsonify({
+            'status': 'success',
+            'dashboard': dashboard_data,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting dashboard data: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Dashboard data not available',
+            'error': str(e)
+        }), 500
 
 
 if __name__ == '__main__':
