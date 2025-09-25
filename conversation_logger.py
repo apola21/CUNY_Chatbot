@@ -346,3 +346,6 @@ class ConversationLogger:
 # Global logger instance
 conversation_logger = ConversationLogger(database_url=os.getenv('DATABASE_URL'))
 
+
+
+
