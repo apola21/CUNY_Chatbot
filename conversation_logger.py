@@ -1,13 +1,15 @@
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, Float, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import uuid
 
+from dotenv import load_dotenv
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 Base = declarative_base()
@@ -69,12 +71,16 @@ class ConversationLogger:
         try:
             self.engine = create_engine(database_url)
             self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-            
-            # Create tables if they don't exist
-            Base.metadata.create_all(bind=self.engine)
-            
+    
+            # Create tables if they don't exist - ignore if they already exist
+            try:
+                Base.metadata.create_all(bind=self.engine)
+                logger.info("Tables created successfully")
+            except Exception as table_error:
+                logger.info(f"Tables already exist or creation failed: {table_error}")
+    
             logger.info("Conversation logger initialized successfully")
-            
+    
         except Exception as e:
             logger.error(f"Failed to initialize conversation logger: {e}")
             self.engine = None
@@ -345,6 +351,13 @@ class ConversationLogger:
 
 # Global logger instance
 conversation_logger = ConversationLogger(database_url=os.getenv('DATABASE_URL'))
+
+
+
+
+
+
+
 
 
 

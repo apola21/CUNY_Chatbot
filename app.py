@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import os
@@ -7,6 +9,9 @@ from datetime import datetime
 import logging
 from knowledge_base import CUNYKnowledgeBase
 from chatbot import CUNYChatbot
+
+
+#conversation_logger = ConversationLogger()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -94,6 +99,16 @@ def get_campus_info():
 def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+# @app.route('/dev', methods=['GET'])
+# def dev_info():
+#     """Development information endpoint"""
+#     return jsonify({
+#         'status': 'development',
+#         'message': 'This is a development endpoint',
+#         'timestamp': datetime.now().isoformat(),
+#         'version': '1.0.0'
+#     })
 
 @app.route('/api/analytics', methods=['GET'])
 def get_analytics():
