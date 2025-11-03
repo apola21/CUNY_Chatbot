@@ -349,8 +349,10 @@ class ConversationLogger:
         
         return gaps
 
-# Global logger instance
-conversation_logger = ConversationLogger(database_url=os.getenv('DATABASE_URL'))
+# Global logger instance - Initialize with None to disable database logging
+# Set environment variable SKIP_DB_LOGGING=true to disable logging for local testing
+conversation_logger = ConversationLogger(database_url=None if os.getenv('SKIP_DB_LOGGING') == 'true' else os.getenv('DATABASE_URL'))
+
 
 
 
